@@ -149,7 +149,7 @@ class FisherMarket:
         ##### Sanity Checks ##### 
 
         # Check that the market clears
-        if(np.sum(np.abs(self.numGoodsVec - numberOfEachGood)) > 0.0001):
+        if(np.sum(self.numGoodsVec - numberOfEachGood) <= 0):
             print(f"Supply of Goods Vector: {self.numGoodsVec}\nNumber of Goods\
              Allocated: {numberOfEachGood}")
 
@@ -274,7 +274,7 @@ class FisherMarket:
         # Objective
         obj = cp.Maximize(self.budgets.T @ cp.log(utils))
 
-        utilConstraints = [(utils[buyer] <= ( alloc[buyer,good] / self.valuations[numberOfBuyers - buyer -1,good])) for good in range(numberOfGoods) for buyer in range(numberOfBuyers)]
+        utilConstraints = [(utils[buyer] <= ( alloc[buyer,good] / self.valuations[buyer, good])) for buyer in range(numberOfBuyers) for good in range(numberOfGoods) ]
         constraints = [ cp.sum(alloc, axis = 0) <= 1,
                         alloc >= 0]
         constraints =  constraints + utilConstraints
