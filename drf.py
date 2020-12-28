@@ -110,32 +110,36 @@ def is_not_ir(allocation, weights, valuations, rho):
 def run_drf(num_goods, num_agents, valuations, rho, supply, weights, prices, epsilon = 0.01):
     allocation = np.zeros((num_agents, num_goods))
     demand = np.zeros(num_goods)
-
+    is_saturated = {good:False for good in range(num_goods)}
     t = 0
+
     while (np.sum(np.abs(supply - demand)) > 0.005 and t < 2000):
         t += 1
         demand = np.sum(allocation, 0)
-        prices = 1/(supply)
-        
-        for good in range(num_goods):
-            if (supply[good] <= demand[good]):
-                prices[good] = np.inf
-        
-        for agent in range(num_agents):
-            
-            hiksian_demand = np.nan_to_num(get_ces_hicksian(valuations[agent,:], prices, 1 , rho))
-            # expenditure = np.nan_to_num(get_ces_expend(valuations[agent,:], prices, 1 , rho))
-            dominant_share = np.max(hiksian_demand/supply)
-            demand_agent = epsilon*(np.nan_to_num(weights[agent]/dominant_share))*hiksian_demand
-            allocation[agent,:] += ((demand + demand_agent) < supply)*demand_agent
-            
-            # print(hiksian_demand)
-            # if (agent == 0 and not (iter % 10)):
-            #     print("-----------------------------------")
-            #     print(f"Expenditure :{expenditure}")
-            #     print(f"Hicksian demand :{hiksian_demand}")
-            #     print(f"Increase in demand: {(weights[agent]/expenditure)*hiksian_demand}")
 
+        for good in range(num_goods):
+            if (supply[good] <= demand[good] and not is_saturated[good]):
+                prices = 1/(supply-demand)
+                is_saturated[good] = True
+                # print(good)
+
+            if(supply[good] <= demand[good]):
+                prices[good] = np.inf
+ 
+        for agent in range(num_agents):
+            hiksian_demand = np.nan_to_num(get_ces_hicksian(valuations[agent,:], prices, 1 , rho))
+            dominant_share = 0
+            for good in range(num_goods):
+                share = hiksian_demand[good]*prices[good]
+                if (not is_saturated[good]) and (share > dominant_share):
+                    dominant_share = share
+            demand_agent = epsilon*(np.nan_to_num(weights[agent]/dominant_share))*hiksian_demand
+            allocation[agent,:] += ((demand + demand_agent)<supply)*demand_agent
+    
+    demand = np.sum(allocation, 0)
+    if ((demand >= 1.1).any()):
+        print(demand)
+    assert (demand <= 1.1).all() 
     return allocation
 
 
@@ -150,11 +154,11 @@ num_agents = 3
 rho = 0.5
 epsilon = 0.001
 supply = np.array([1, 1, 1, 1, 1])
-weights = np.array([1/4, 1/4, 1/2])
+weights = np.array([1/3, 1/3, 1/3])
 valuations = np.random.rand(num_agents, num_goods)
 
 # Test
-X = run_drf(num_goods, num_agents, valuations, rho, supply, weights, epsilon = 0.01, prices = 1/supply)
+X = run_drf(num_goods, num_agents, valuations, rho, supply, weights, epsilon = 0.005, prices = 1/supply)
 print(np.sum(X, axis = 0))
 
 # %%
@@ -176,7 +180,7 @@ for i in range(500):
     
     # Solve for market prices and allocations for desired utility function structure.
     alloc_fm, p = market.solveMarket("ces", printResults=False)
-    alloc_drf = run_drf(num_goods, num_agents, valuations, rho, supply, weights, epsilon = 0.01, prices = 1/supply)    
+    alloc_drf = run_drf(num_goods, num_agents, valuations, rho, supply, weights, epsilon = 0.005, prices = 1/supply)    
     
     ce_dominates += pareto_dominates(alloc_fm, alloc_drf, valuations, rho)
     drf_dominates += pareto_dominates(alloc_drf, alloc_fm, valuations, rho)
@@ -195,7 +199,6 @@ plt.ylabel("Count", size=14)
 plt.title("Comparing the Welfares of DRF and Competitive Equilibria")
 plt.legend(loc='upper right')
 
-plt.savefig('substitutes.png')
 #%%
 # Check for IR being respected
 
@@ -206,7 +209,7 @@ for i in range(1000):
         print(f"--- Experiment {i} ---\n")
     
     valuation = np.random.rand(num_agents,num_goods)
-    alloc = run_drf(num_goods, num_agents, valuation, rho, supply, weights, epsilon = 1, prices = 1/supply)
+    alloc = run_drf(num_goods, num_agents, valuation, rho, supply, weights, epsilon = 0.005, prices = 1/supply)
     alloc_is_not_ir = is_not_ir(alloc, weights, valuation, rho)
     if (alloc_is_not_ir):
         print(np.sum(alloc, axis = 0))
@@ -222,13 +225,13 @@ violates_ic = 0
 for model in range(100):
     print(f"--- Model {model}---\n")
     valuation = np.random.rand(num_agents, num_goods)
-    alloc1 = run_drf(num_goods, num_agents, valuation, rho, supply, weights, epsilon = 1, prices = 1/supply)
+    alloc1 = run_drf(num_goods, num_agents, valuation, rho, supply, weights, epsilon = 0.005, prices = 1/supply)
     misreport = np.copy(valuation)
     for experiment in range(1000):
         if(not (experiment % 50)):
             print(f"--- Experiment {experiment}---\n")
         misreport[0,:] = np.random.rand(num_goods)
-        alloc2 = run_drf(num_goods, num_agents, misreport, rho, supply, weights, epsilon = 1, prices = 1/supply)
+        alloc2 = run_drf(num_goods, num_agents, misreport, rho, supply, weights, epsilon = 0.005, prices = 1/supply)
         is_not_ic = (get_ces_utility(alloc2[0,:], valuation[0,:], rho) > get_ces_utility(alloc1[0,:], valuation[0,:], rho))
         if(is_not_ic):
             violates_ic += is_not_ic
@@ -312,25 +315,17 @@ def run_drf(num_goods, num_agents, valuations, rho, supply, weights, prices, eps
     while (np.sum(np.abs(supply - demand)) > 0.005 and t < 1000):
         t += 1
         demand = np.sum(allocation, 0)
-        prices = 1/(supply)
-        # print(iter)
-        # print(prices)
-        # print(demand)
+        prices = 1/(supply-demand)
+
         for good in range(num_goods):
             if (supply[good] <= demand[good]):
                 prices[good] = np.inf
         
         for agent in range(num_agents):
             hiksian_demand = np.nan_to_num(get_leontief_hicksian(valuations[agent,:], prices, 1 ))
-            expenditure =  np.max(supply*hiksian_demand)
+            expenditure =  np.sum(supply*hiksian_demand)
             demand_agent = (epsilon)*(np.nan_to_num(weights[agent]/expenditure))*hiksian_demand
             allocation[agent,:] += ((demand+demand_agent) < supply)*demand_agent
-
-            # if (agent == 0 and not (iter % 10)):
-            #     print("-----------------------------------")
-            #     print(f"Expenditure :{expenditure}")
-            #     print(f"Hicksian demand :{hiksian_demand}")
-            #     print(f"Increase in demand: {(weights[agent]/expenditure)*hiksian_demand}")
             demand = np.sum(allocation, 0)
     return allocation
 
